@@ -521,7 +521,9 @@ data Proposition
   | Var Char
   | Not Proposition
   | And Proposition Proposition
+  | Or Proposition Proposition
   | Imply Proposition Proposition
+  | Equivalence Proposition Proposition
 
 p1 :: Proposition
 p1 = And (Var 'A') (Not (Var 'A'))
@@ -535,21 +537,37 @@ p3 = Imply (Var 'A') (And (Var 'A') (Var 'B'))
 p4 :: Proposition
 p4 = Imply (And (Var 'A') (Imply (Var 'A') (Var 'B'))) (Var 'B')
 
+p5 :: Proposition
+p5 = Imply (And (Var 'A') (Or (Var 'A') (Var 'B'))) (Var 'A')
+
+p6 :: Proposition
+p6 = Imply (Or (Var 'A') (Var 'B')) (Var 'A')
+
+p7 :: Proposition
+p7 = Equivalence (Not (Imply (Var 'A') (Var 'B'))) (And (Var 'A') (Not (Var 'B')))
+
+p8 :: Proposition
+p8 = Imply (And (Var 'A') (Var 'B')) (Or (Var 'A') (Var 'B'))
+
 type SubsTable = Assoc Char Bool
 
 eval :: SubsTable -> Proposition -> Bool
 eval _ (Const b) = b
 eval s (Var x) = findAssoc x s
 eval s (Not p) = not (eval s p)
+eval s (Or p1 p2) = eval s p1 || eval s p2
 eval s (And p1 p2) = eval s p1 && eval s p2
 eval s (Imply p q) = eval s p <= eval s q
+eval s (Equivalence p q) = eval s p == eval s q
 
 vars :: Proposition -> [Char]
 vars (Const _) = []
 vars (Var c) = [c]
 vars (Not p) = vars p
 vars (And p q) = vars p ++ vars q
+vars (Or p q) = vars p ++ vars q
 vars (Imply p q) = vars p ++ vars q
+vars (Equivalence p q) = vars p ++ vars q
 
 bools :: Int -> [[Bool]]
 bools 0 = [[]]
@@ -564,3 +582,137 @@ getSubsTable p = map (zip vs) (bools (length vs))
 
 isTaut :: Proposition -> Bool
 isTaut p = and [eval s p | s <- getSubsTable p]
+
+---- Abstract Machine ----
+
+data Expr
+  = Val Int
+  | Add Expr Expr
+  | Mul Expr Expr
+  deriving (Eq, Show)
+
+value :: Expr -> Int
+value (Val x) = x
+value (Add e1 e2) = value e1 + value e2
+value (Mul e1 e2) = value e1 * value e2
+
+type ControlStack = [Operations]
+
+data Operations
+  = ADD Expr
+  | MUL Expr
+  | PLUS Int
+  | TIMES Int
+
+evalE :: Expr -> ControlStack -> Int
+evalE (Val n) c = exec c n
+evalE (Add e1 e2) c = evalE e1 (ADD e2 : c)
+evalE (Mul e1 e2) c = evalE e1 (MUL e2 : c)
+
+exec :: ControlStack -> Int -> Int
+exec [] n = n
+exec (ADD y : c) n = evalE y (PLUS n : c)
+exec (MUL y : c) n = evalE y (TIMES n : c)
+exec (PLUS n : c) m = exec c (n + m)
+exec (TIMES n : c) m = exec c (n * m)
+
+valueE :: Expr -> Int
+valueE e = evalE e []
+
+-- 1.
+
+-- addNat :: Nat -> Nat -> Nat
+-- addNat Zero n = n
+-- addNat (Succ m) n = Succ (addNat m n)
+
+mulNat :: Nat -> Nat -> Nat
+mulNat Zero _ = Zero
+mulNat (Succ m) n = addNat n (mulNat m n)
+
+three :: Nat
+three = Succ (Succ (Succ Zero))
+
+four :: Nat
+four = Succ three
+
+nat2Int :: Nat -> Int
+nat2Int Zero = 0
+nat2Int (Succ n) = 1 + nat2Int n
+
+-- 2.
+
+data Tree2 a
+  = Leaf2 a
+  | Node2 (Tree2 a) a (Tree2 a)
+  deriving (Eq, Show)
+
+occurs :: Ord a => a -> Tree2 a -> Bool
+occurs x (Leaf2 y) = x == y
+occurs x (Node2 l v r) =
+  case compare x v of
+    EQ -> True
+    LT -> occurs x l
+    _ -> occurs x r
+
+-- 3.
+
+data Tree a
+  = Leaf a
+  | Node (Tree a) (Tree a)
+  deriving (Show)
+
+numberOfLeafs :: Tree a -> Int
+numberOfLeafs (Leaf _) = 1
+numberOfLeafs (Node l r) = numberOfLeafs l + numberOfLeafs r
+
+balanced :: Tree a -> Bool
+balanced (Leaf _) = True
+balanced (Node t1 t2) = numberOfLeafs t1 - numberOfLeafs t2 <= 1 && balanced t1 && balanced t2
+
+-- 4.
+
+balance :: [a] -> Tree a
+balance [x] = Leaf x
+balance xs = Node (balance left) (balance right)
+  where
+    (left, right) = halve xs
+
+-- 5.
+
+-- data Expr
+--   = Val Int
+--   | Add Expr Expr
+--   deriving (Eq, Show)
+
+folde :: (Int -> a) -> (a -> a -> a) -> (a -> a -> a) -> Expr -> a
+folde f _ _ (Val n) = f n
+folde f g h (Add e1 e2) = g (folde f g h e1) (folde f g h e2)
+folde f g h (Mul e1 e2) = h (folde f g h e1) (folde f g h e2)
+
+-- 6.
+
+eval2 :: Expr -> Int
+eval2 = folde id (+) (*)
+
+e1 :: Expr
+e1 = Add (Add (Val 5) (Val 6)) (Add (Val 7) (Add (Val 8) (Val 9)))
+
+e2 :: Expr
+e2 =
+  Mul
+    (Add (Val 2) (Val 3))
+    (Add (Val 4) (Val 5))
+
+size :: Expr -> Int
+size = folde (const 1) (+) (+)
+
+-- 7.
+
+-- instance Eq a => Eq (Maybe a) where
+--   Nothing == Nothing = True
+--   Just x == Just y = x == y
+--   _ == _ = False
+
+-- instance Eq a => Eq [a] where
+--   (==) (x : xs) (y : ys) = x == y && xs == ys
+--   (==) [] [] = True
