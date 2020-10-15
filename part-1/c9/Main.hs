@@ -8,24 +8,28 @@ data Op
   | Sub
   | Mul
   | Div
+  | Expo
 
 instance Show Op where
   show Add = " + "
   show Sub = " - "
   show Mul = " * "
   show Div = " / "
+  show Expo = " ^ "
 
 valid :: Op -> Int -> Int -> Bool
 valid Add _ _ = True
 valid Sub x y = x > y
 valid Mul _ _ = True
 valid Div x y = x `mod` y == 0
+valid Expo _ y = y > 1
 
 apply :: Op -> Int -> Int -> Int
 apply Add x y = x + y
 apply Sub x y = x - y
 apply Mul x y = x * y
 apply Div x y = x `div` y
+apply Expo x y = x ^ y
 
 data Expr
   = Val Int
@@ -44,7 +48,7 @@ values (App _ l r) = values l ++ values r
 
 eval :: Expr -> [Int]
 eval (Val n) = [n | n > 0]
-eval (App o l r) = [apply o x y | x <- eval l, y <- eval r, valid o x y]
+eval (App o l r) = [apply o x y | x <- eval l, y <- eval r, valid2 o x y]
 
 subsets :: [a] -> [[a]]
 subsets [] = [[]]
@@ -86,7 +90,7 @@ combine :: Expr -> Expr -> [Expr]
 combine l r = [App o l r | o <- ops]
 
 ops :: [Op]
-ops = [Add, Sub, Mul, Div]
+ops = [Add, Sub, Mul, Div, Expo]
 
 solutions :: [Int] -> Int -> [Expr]
 solutions ns n =
@@ -115,8 +119,10 @@ solutions' ns target =
 
 valid2 :: Op -> Int -> Int -> Bool
 valid2 Add x y = x <= y
-valid2 Mul x y = x /= 1 && y /= 1 && x <= y
-valid2 Div x y = y /= 1 && x `mod` y == 0
+valid2 Sub x y = x > y
+valid2 Mul x y = x > 1 && y > 1 && x <= y
+valid2 Div x y = y > 1 && x `mod` y == 0
+valid2 Expo _ y = y > 1
 
 results' :: [Int] -> [Result]
 results' [] = []
@@ -145,3 +151,23 @@ isChoice _ [] = False
 isChoice (x : xs) ys = removed /= ys && isChoice xs (removeFirst x ys)
   where
     removed = removeFirst x ys
+
+-- 4.
+
+list :: [Int]
+list = [1, 3, 7, 10, 25, 50]
+
+allChoices :: [[Int]]
+allChoices = choices list
+
+allExprs = concatMap exprs allChoices
+
+validEval = length . filter (/= []) . map eval $ allExprs
+
+-- We allow all integers as long as they dont result in 0, coz we dont want division by zero
+valid3 :: Op -> Int -> Int -> Bool
+valid3 Add _ _ = True
+valid3 Sub _ _ = True
+valid3 Mul _ _ = True
+valid3 Div x y = y /= 0 && x `mod` y == 0
+valid3 Expo _ y = y > 1
