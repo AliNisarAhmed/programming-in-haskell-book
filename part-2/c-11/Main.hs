@@ -2,6 +2,7 @@ module Main where
 
 import Data.Char
 import Data.List
+import Data.Maybe (fromMaybe)
 import System.IO
 import System.Random (randomRIO)
 
@@ -114,19 +115,23 @@ goto (x, y) = putStr ("\ESC[" ++ show y ++ ";" ++ show x ++ "H")
 
 -----
 
-g1 = concat $ move empty 4 O
+g1 = concat $ move empty 0 X
 
-g2 = concat $ move g1 0 X
+g2 = concat $ move g1 1 O
 
-g3 = concat $ move g2 1 O
+g3 = concat $ move g2 2 X
 
-g4 = concat $ move g3 2 X
+g4 = concat $ move g3 3 O
 
--- g5 = concat $ move g4 2 X
+g5 = concat $ move g4 4 X
 
--- g6 = concat $ move g5 1 O
+g6 = concat $ move g5 5 O
 
--- g7 = concat $ move g6 6 O
+g7 = concat $ move g6 6 O
+
+g8 = concat $ move g7 7 X
+
+g9 = concat $ move g8 8 O
 
 run :: Grid -> Player -> IO ()
 run g p = do
@@ -183,11 +188,22 @@ minimax (Node g ts) player
     ts' = map (flip minimax $ player) ts
     ps = [p | Node (_, p) _ <- ts']
 
-bestmove :: Grid -> Player -> Grid
-bestmove g p =
+-- minimax :: Tree Grid -> Player -> Tree (Grid, Player)
+-- minimax (Node g []) player
+--   | wins O g = Node (g, O) []
+--   | wins X g = Node (g, X) []
+--   | otherwise = Node (g, B) []
+-- minimax (Node g ts) player
+--   | turn g player == O = Node (g, fromMaybe B $ find (== O) ps) ts'
+--   | turn g player == X = Node (g, fromMaybe B $ find (== X) ps) ts'
+--   where
+--     ts' = map (flip minimax $ player) ts
+--     ps = [p | Node (_, p) _ <- ts']
+
+bestmove :: Grid -> Player -> Tree Grid -> Grid
+bestmove g p tree =
   getGridFromLabeledTree $ minimumBy depthCompare $ [t | t <- ts, getPlayerFromLabeledTree t == best]
   where
-    tree = prune depth (gametree g p)
     Node (_, best) ts = minimax tree p
 
 main :: IO ()
@@ -196,22 +212,26 @@ main = do
   putStrLn "Do you want to make the first move? (y/n):"
   res <- getLine
   case res of
-    "y" -> play empty O
-    "n" -> play (head $ move empty 4 X) O
+    "y" -> play empty O emptyGridTree
+    "n" -> play computerFirstMove O computerGameTree
     _ -> do
       putStrLn "Please enter either y or n: "
       main
+  where
+    computerFirstMove = concat $ move empty 4 X
+    emptyGridTree = gametree empty O
+    computerGameTree = gametree computerFirstMove X
 
-play :: Grid -> Player -> IO ()
-play g p =
+play :: Grid -> Player -> Tree Grid -> IO ()
+play g p gt =
   do
     cls
     goto (1, 1)
     putGrid g
-    play' g p
+    play' g p gt
 
-play' :: Grid -> Player -> IO ()
-play' g p
+play' :: Grid -> Player -> Tree Grid -> IO ()
+play' g p gt
   | wins O g = putStrLn "Player O wins!\n"
   | wins X g = putStrLn "Player X wins!\n"
   | full g = putStrLn "It's a draw!\n"
@@ -220,13 +240,15 @@ play' g p
     case move g i p of
       [] -> do
         putStrLn "ERROR: Invalid move"
-        play' g p
+        play' g p gt
       [g'] ->
-        play g' (next p)
+        play g' (next p) (nextGameTree gt g')
   | p == X =
     do
       putStr "Player X is thinking... "
-      (play $! (bestmove g p)) (next p)
+      let nextmove = bestmove g p gt
+          nextTree = nextGameTree gt nextmove
+      (play $! nextmove) (next p) nextTree
 
 -- 1.
 
@@ -247,5 +269,18 @@ calcDepth (Node _ []) = 0
 calcDepth (Node _ ts) = 1 + (maximum $ map calcDepth ts)
 
 depthCompare :: Tree a -> Tree a -> Ordering
-depthCompare (Node _ []) (Node _ []) = EQ
 depthCompare n1 n2 = compare (calcDepth n1) (calcDepth n2)
+
+-- 4.
+
+nextGameTree :: Tree Grid -> Grid -> Tree Grid
+nextGameTree x@(Node _ ts) g =
+  case bestmoveGrid of
+    Nothing -> x
+    Just v -> v
+  where
+    bestmoveGrid = safeHead $ filter (\(Node v _) -> v == g) ts
+
+safeHead :: [a] -> Maybe a
+safeHead [] = Nothing
+safeHead (x : xs) = Just x
