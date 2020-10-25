@@ -202,6 +202,95 @@ eval xs =
     [(_, out)] -> error ("Unused input " ++ out)
     [] -> error "Invalid input"
 
+-- 4.
+
+data Factor
+  = Parens Expr
+  | Val Int
+  deriving (Show)
+
+data Term
+  = SimpleTerm Factor
+  | MulTerm Factor Term
+  | DivTerm Factor Term
+  deriving (Show)
+
+data Expr
+  = SimpleExpr Term
+  | AddExpr Term Expr
+  | SubExpr Term Expr
+  deriving (Show)
+
+-- 2 + 3
+e1 :: Expr
+e1 = AddExpr (SimpleTerm (Val 2)) (SimpleExpr $ SimpleTerm (Val 3))
+
+parensParser :: Parser Factor
+parensParser =
+  do
+    symbol "("
+    e <- exprParser
+    symbol ")"
+    return $ Parens e
+
+valParser :: Parser Factor
+valParser = do
+  n <- int
+  return $ Val n
+
+factorParser :: Parser Factor
+factorParser = parensParser <|> valParser
+
+termParser :: Parser Term
+termParser =
+  do
+    f <- factorParser
+    do
+      symbol "*"
+      t <- termParser
+      return $ MulTerm f t
+      <|> do
+        symbol "/"
+        t <- termParser
+        return $ DivTerm f t
+      <|> do
+        return $ SimpleTerm f
+
+exprParser :: Parser Expr
+exprParser =
+  do
+    t <- termParser
+    do
+      symbol "+"
+      e <- exprParser
+      return $ AddExpr t e
+      <|> do
+        symbol "-"
+        e <- exprParser
+        return $ SubExpr t e
+      <|> do
+        return $ SimpleExpr t
+
+evalFactor :: Factor -> Int
+evalFactor (Parens e) = evalExpr e
+evalFactor (Val n) = n
+
+evalTerm :: Term -> Int
+evalTerm (SimpleTerm f) = evalFactor f
+evalTerm (MulTerm f t) = evalFactor f * evalTerm t
+evalTerm (DivTerm f t) = evalFactor f `div` evalTerm t
+
+evalExpr :: Expr -> Int
+evalExpr (SimpleExpr t) = evalTerm t
+evalExpr (AddExpr t e) = evalTerm t + evalExpr e
+evalExpr (SubExpr t e) = evalTerm t - evalExpr e
+
+getExpr :: String -> Maybe Expr
+getExpr s =
+  case parse exprParser s of
+    [] -> Nothing
+    [(e, _)] -> Just e
+
 --- Calculator
 
 box :: [String]
@@ -261,7 +350,8 @@ calc xs = do
   display xs
   c <- getCh
   if elem c buttons
-    then process c xs
+    then do
+      process c xs
     else do
       beep
       calc xs
@@ -300,3 +390,11 @@ run = do
   cls
   showbox
   clear
+
+-- 1.
+
+comment :: Parser ()
+comment = do
+  string "--"
+  many $ sat (/= '\n')
+  return ()
