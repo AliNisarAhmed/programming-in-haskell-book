@@ -25,32 +25,32 @@ newtype ST a = S (State -> (a, State))
 app :: ST a -> State -> (a, State)
 app (S sf) s = sf s
 
-instance Functor ST where
-  fmap f st =
-    S
-      ( \s ->
-          let (x, s') = app st s
-           in (f x, s')
-      )
+-- instance Functor ST where
+--   fmap f st =
+--     S
+--       ( \s ->
+--           let (x, s') = app st s
+--            in (f x, s')
+--       )
 
-instance Applicative ST where
-  pure a = S (\s -> (a, s))
-  sf <*> sx =
-    S
-      ( \s ->
-          let (f, s') = app sf s
-              (x, s'') = app sx s'
-           in (f x, s'')
-      )
+-- instance Applicative ST where
+--   pure a = S (\s -> (a, s))
+--   sf <*> sx =
+--     S
+--       ( \s ->
+--           let (f, s') = app sf s
+--               (x, s'') = app sx s'
+--            in (f x, s'')
+--       )
 
-instance Monad ST where
-  return = pure
-  sa >>= sf =
-    S
-      ( \s ->
-          let (a, s') = app sa s
-           in app (sf a) s'
-      )
+-- instance Monad ST where
+--   return = pure
+--   sa >>= sf =
+--     S
+--       ( \s ->
+--           let (a, s') = app sa s
+--            in app (sf a) s'
+--       )
 
 tree :: Tree Char
 tree = Node (Node (Leaf 'a') (Leaf 'b')) (Leaf 'c')
@@ -165,3 +165,25 @@ add2 = Var "c"
 g = ord
 
 h = toUpper
+
+-- 8.
+
+instance Functor ST where
+  fmap f st = do
+    a <- st
+    return $ f a
+
+instance Applicative ST where
+  pure x = S (\s -> (x, s))
+  sf <*> sx = do
+    x <- sx
+    f <- sf
+    return $ f x
+
+instance Monad ST where
+  st >>= f =
+    S
+      ( \s ->
+          let (x, s') = app st s
+           in app (f x) s'
+      )
